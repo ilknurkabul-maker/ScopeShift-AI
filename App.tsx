@@ -1,9 +1,10 @@
 
+
 import React, { useState } from 'react';
 import { ScenarioInput } from './components/ScenarioInput';
 import { OutputDisplay } from './components/OutputDisplay';
-import { ScopeShiftOutput, Tab, ProposedFeature, ScopeAnalysisOutput, TestPlanOutput } from './types';
-import { generateScope, proposeFeatures, analyzeScope, generateTestPlan } from './services/geminiService';
+import { ScopeShiftOutput, Tab, ProposedFeature, ScopeAnalysisOutput, TestPlanOutput, Constraints, ReScopeOutput } from './types';
+import { generateScope, proposeFeatures, analyzeScope, generateTestPlan, proposeReScope } from './services/geminiService';
 
 function App() {
   const [scenario, setScenario] = useState('');
@@ -23,6 +24,10 @@ function App() {
   const [testPlan, setTestPlan] = useState<TestPlanOutput | null>(null);
   const [isGeneratingTests, setIsGeneratingTests] = useState(false);
   const [testPlanError, setTestPlanError] = useState<string | null>(null);
+  
+  const [reScopeOutput, setReScopeOutput] = useState<ReScopeOutput | null>(null);
+  const [isReScoping, setIsReScoping] = useState(false);
+  const [reScopeError, setReScopeError] = useState<string | null>(null);
 
   const handleGenerate = async () => {
     if (!scenario.trim()) return;
@@ -35,6 +40,8 @@ function App() {
     setAnalysisError(null);
     setTestPlan(null);
     setTestPlanError(null);
+    setReScopeOutput(null);
+    setReScopeError(null);
     try {
       const result = await generateScope(scenario);
       setOutput(result);
@@ -128,6 +135,33 @@ function App() {
     }
   };
 
+  const handleReScope = async () => {
+    const scopeInput = createScopeInput();
+    if (!scopeInput) return;
+
+    setIsReScoping(true);
+    setReScopeError(null);
+    setReScopeOutput(null);
+
+    const newConstraints: Partial<Constraints> = {
+        cold_start_ms: 200,
+        auth_required: false,
+    };
+
+    try {
+        const result = await proposeReScope(scopeInput, newConstraints);
+        setReScopeOutput(result);
+    } catch (err) {
+        if (err instanceof Error) {
+            setReScopeError(err.message);
+        } else {
+            setReScopeError('An unknown error occurred during re-scoping.');
+        }
+    } finally {
+        setIsReScoping(false);
+    }
+  };
+
 
   return (
     <div className="min-h-screen bg-slate-900 text-white p-4 sm:p-6 lg:p-8">
@@ -169,6 +203,10 @@ function App() {
               testPlan={testPlan}
               isGeneratingTests={isGeneratingTests}
               testPlanError={testPlanError}
+              onReScope={handleReScope}
+              reScopeOutput={reScopeOutput}
+              isReScoping={isReScoping}
+              reScopeError={reScopeError}
             />
           </div>
         </main>

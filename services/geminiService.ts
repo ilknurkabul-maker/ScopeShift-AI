@@ -1,6 +1,7 @@
 
+
 import { GoogleGenAI, Type } from "@google/genai";
-import { Feature, ScopeShiftOutput, ProposedFeaturesOutput, ScopeAnalysisInput, ScopeAnalysisOutput, TestPlanOutput, Test } from '../types';
+import { Feature, ScopeShiftOutput, ProposedFeaturesOutput, ScopeAnalysisInput, ScopeAnalysisOutput, TestPlanOutput, Test, Constraints, ReScopeOutput } from '../types';
 
 const API_KEY = process.env.API_KEY;
 
@@ -378,5 +379,86 @@ RULES:
             throw new Error(`Failed to generate test plan: ${error.message}`);
         }
         throw new Error("An unknown error occurred while generating test plan.");
+    }
+};
+
+const reScopeSchema = {
+    type: Type.OBJECT,
+    properties: {
+        changes: {
+            type: Type.ARRAY,
+            items: {
+                type: Type.OBJECT,
+                description: "A change to the scope. Can be one of 'defer', 'replace', 'modify_ac'.",
+                properties: {
+                    type: { type: Type.STRING, description: "Type of change." },
+                    feature: { type: Type.STRING, description: "Feature ID." },
+                    to: { type: Type.STRING, description: "Target version, e.g., 'V1'." },
+                    reason: { type: Type.STRING, description: "Reason for the change." },
+                    from: { type: Type.STRING, description: "Feature ID to replace." },
+                    ac: { type: Type.STRING, description: "Acceptance Criterion ID." },
+                    old: { type: Type.STRING, description: "Old text of the AC." },
+                    new: { type: Type.STRING, description: "New text of the AC." },
+                },
+                required: ['type']
+            }
+        },
+        impact_summary: {
+            type: Type.OBJECT,
+            properties: {
+                cold_start_ms: { type: Type.STRING, description: "Estimated change in cold start time, e.g., 'approx -150'." },
+                notes: { type: Type.STRING, description: "Summary notes about the impact." }
+            },
+            required: ['cold_start_ms', 'notes']
+        },
+        diff_panel: {
+            type: Type.OBJECT,
+            properties: {
+                before: { type: Type.ARRAY, items: { type: Type.STRING }, description: "List of scope items before changes." },
+                after: { type: Type.ARRAY, items: { type: Type.STRING }, description: "List of scope items after changes." }
+            },
+            required: ['before', 'after']
+        }
+    },
+    required: ['changes', 'impact_summary', 'diff_panel']
+};
+
+export const proposeReScope = async (current_contract: ScopeAnalysisInput, new_constraints: Partial<Constraints>): Promise<ReScopeOutput> => {
+    const prompt = `TASK: Propose a deterministic re-scope for the given constraints.
+RETURN JSON ONLY.
+
+CURRENT_CONTRACT:
+${JSON.stringify(current_contract, null, 2)}
+
+NEW_CONSTRAINTS:
+${JSON.stringify(new_constraints, null, 2)}
+
+RULES:
+- Prefer deferring V1-leaning features that add latency (email confirmation, CSV file I/O).
+- Favor replacements with zero I/O (inline copy instead of CSV file).
+- Modify ACs to keep MVP public and schema-safe.
+`;
+
+    try {
+        const response = await ai.models.generateContent({
+            model: "gemini-2.5-pro",
+            contents: { parts: [{ text: prompt }] },
+            systemInstruction: { parts: [{ text: "You are an AI product manager that proposes scope changes to meet new constraints. You must follow the user's instructions precisely and only return JSON that adheres to the provided schema." }] },
+            config: {
+                responseMimeType: "application/json",
+                responseSchema: reScopeSchema,
+                temperature: 0.1,
+            }
+        });
+
+        const jsonText = response.text.trim();
+        return JSON.parse(jsonText) as ReScopeOutput;
+
+    } catch (error) {
+        console.error("Error proposing re-scope with Gemini API:", error);
+        if (error instanceof Error) {
+            throw new Error(`Failed to propose re-scope: ${error.message}`);
+        }
+        throw new Error("An unknown error occurred while proposing re-scope.");
     }
 };

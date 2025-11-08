@@ -1,4 +1,5 @@
 
+
 export interface AcceptanceCriterion {
   id: string;
   description: string;
@@ -75,7 +76,7 @@ export interface AcceptanceCriterionInput {
 export interface Constraints {
     cold_start_ms: number;
     auth_required: boolean;
-    p99_latency_ms: number;
+    p99_latency_ms?: number;
 }
 
 export interface ScopeAnalysisInput {
@@ -129,4 +130,41 @@ export interface Test {
 
 export interface TestPlanOutput {
     tests: Test[];
+}
+
+// Types for Re-scoping
+interface DeferChange {
+    type: 'defer';
+    feature: string;
+    to: 'V1';
+    reason: string;
+}
+
+interface ReplaceChange {
+    type: 'replace';
+    from: string;
+    to: string;
+    reason: string;
+}
+
+interface ModifyAcChange {
+    type: 'modify_ac';
+    feature: string;
+    ac: string;
+    old: string;
+    new: string;
+}
+
+export type ReScopeChange = DeferChange | ReplaceChange | ModifyAcChange;
+
+export interface ReScopeOutput {
+    changes: ReScopeChange[];
+    impact_summary: {
+        cold_start_ms: string;
+        notes: string;
+    };
+    diff_panel: {
+        before: string[];
+        after: string[];
+    };
 }

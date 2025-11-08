@@ -1,6 +1,7 @@
 
+
 import React from 'react';
-import { ScopeShiftOutput, Tab, ProposedFeature, ScopeAnalysisOutput, TestPlanOutput } from '../types';
+import { ScopeShiftOutput, Tab, ProposedFeature, ScopeAnalysisOutput, TestPlanOutput, ReScopeOutput, ReScopeChange } from '../types';
 import { FeatureCard } from './FeatureCard';
 import { CodeBlock } from './CodeBlock';
 import { ProposalCard } from './ProposalCard';
@@ -25,6 +26,10 @@ interface OutputDisplayProps {
   testPlan: TestPlanOutput | null;
   isGeneratingTests: boolean;
   testPlanError: string | null;
+  onReScope: () => void;
+  reScopeOutput: ReScopeOutput | null;
+  isReScoping: boolean;
+  reScopeError: string | null;
 }
 
 const SkeletonLoader = () => (
@@ -83,8 +88,32 @@ const DownloadIcon = () => (
     </svg>
 );
 
+const AdjustmentsIcon = () => (
+    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+        <path strokeLinecap="round" strokeLinejoin="round" d="M12 6V4m0 2v2m0 10v2m0-2v-2m-6 2v-2m0 2v2m0-10V4m0 2v2m12 6v-2m0 2v2m0-10V4m0 2v2" />
+    </svg>
+);
 
-export const OutputDisplay: React.FC<OutputDisplayProps> = ({ output, isLoading, error, activeTab, setActiveTab, onPropose, proposedFeatures, isProposing, proposalError, onAnalyze, analysisOutput, isAnalyzing, analysisError, onGenerateTests, testPlan, isGeneratingTests, testPlanError }) => {
+const DeferIcon = () => (
+    <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-sky-400 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+        <path strokeLinecap="round" strokeLinejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+    </svg>
+);
+
+const ReplaceIcon = () => (
+    <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-indigo-400 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+        <path strokeLinecap="round" strokeLinejoin="round" d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
+    </svg>
+);
+
+const ModifyIcon = () => (
+    <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-amber-400 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+        <path strokeLinecap="round" strokeLinejoin="round" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.5L15.232 5.232z" />
+    </svg>
+);
+
+
+export const OutputDisplay: React.FC<OutputDisplayProps> = ({ output, isLoading, error, activeTab, setActiveTab, onPropose, proposedFeatures, isProposing, proposalError, onAnalyze, analysisOutput, isAnalyzing, analysisError, onGenerateTests, testPlan, isGeneratingTests, testPlanError, onReScope, reScopeOutput, isReScoping, reScopeError }) => {
   const tabs = Object.values(Tab);
 
   const handleExportJson = () => {
@@ -208,6 +237,95 @@ export const OutputDisplay: React.FC<OutputDisplayProps> = ({ output, isLoading,
     );
   }
 
+  const renderChangeDetails = (change: ReScopeChange) => {
+    switch (change.type) {
+        case 'defer':
+            return (
+                <div>
+                    <p>Defer feature <span className="font-mono bg-slate-700 px-1 rounded">{change.feature}</span> to <strong>{change.to}</strong>.</p>
+                    <p className="text-sm text-slate-400 mt-1"><em>Reason:</em> {change.reason}</p>
+                </div>
+            );
+        case 'replace':
+            return (
+                <div>
+                    <p>Replace <span className="font-mono bg-slate-700 px-1 rounded">{change.from}</span> with <span className="font-mono bg-slate-700 px-1 rounded">{change.to}</span>.</p>
+                     <p className="text-sm text-slate-400 mt-1"><em>Reason:</em> {change.reason}</p>
+                </div>
+            );
+        case 'modify_ac':
+            return (
+                <div>
+                    <p>Modify AC <span className="font-mono bg-slate-700 px-1 rounded">{change.ac}</span> in feature <span className="font-mono bg-slate-700 px-1 rounded">{change.feature}</span>.</p>
+                    <div className="mt-2 text-xs space-y-1">
+                        <p><span className="text-red-400 font-bold">OLD:</span> <code className="bg-slate-900 p-1 rounded">{change.old}</code></p>
+                        <p><span className="text-green-400 font-bold">NEW:</span> <code className="bg-slate-900 p-1 rounded">{change.new}</code></p>
+                    </div>
+                </div>
+            );
+        default:
+            return <p>Unknown change type</p>;
+    }
+  };
+  
+  const renderReScope = () => {
+    if (isReScoping) return <ProposalSkeletonLoader />;
+    if (reScopeError) return <ErrorDisplay message={reScopeError} />;
+    if (!reScopeOutput) return null;
+    
+    const ChangeIcon: React.FC<{ type: string }> = ({ type }) => {
+        if (type === 'defer') return <DeferIcon />;
+        if (type === 'replace') return <ReplaceIcon />;
+        if (type === 'modify_ac') return <ModifyIcon />;
+        return null;
+    };
+
+    return (
+      <div className="space-y-6">
+          <div>
+              <h4 className="text-lg font-semibold text-slate-200 mb-2">Impact Summary</h4>
+              <div className="bg-slate-900 border border-slate-700 rounded-lg p-4">
+                  <p><strong>Cold Start Change:</strong> <span className="font-mono text-indigo-300">{reScopeOutput.impact_summary.cold_start_ms}ms</span></p>
+                  <p className="text-sm text-slate-400 mt-2"><strong>Notes:</strong> {reScopeOutput.impact_summary.notes}</p>
+              </div>
+          </div>
+
+          <div>
+              <h4 className="text-lg font-semibold text-slate-200 mb-2">Before & After</h4>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="bg-slate-900 border border-red-700/50 rounded-lg p-4">
+                      <h5 className="font-bold mb-2 text-red-300">Before</h5>
+                      <ul className="list-disc list-inside text-sm text-slate-300 space-y-1 font-mono">
+                          {reScopeOutput.diff_panel.before.map((item, i) => <li key={i}>{item}</li>)}
+                      </ul>
+                  </div>
+                  <div className="bg-slate-900 border border-green-700/50 rounded-lg p-4">
+                      <h5 className="font-bold mb-2 text-green-300">After</h5>
+                      <ul className="list-disc list-inside text-sm text-slate-300 space-y-1 font-mono">
+                          {reScopeOutput.diff_panel.after.map((item, i) => <li key={i}>{item}</li>)}
+                      </ul>
+                  </div>
+              </div>
+          </div>
+          
+          <div>
+              <h4 className="text-lg font-semibold text-slate-200 mb-2">Proposed Change Details</h4>
+              <div className="space-y-3">
+                  {reScopeOutput.changes.map((change, index) => (
+                      <div key={index} className="bg-slate-900 border border-slate-700 rounded-lg p-4 flex items-start gap-4">
+                          <ChangeIcon type={(change as any).type} />
+                          <div className="flex-1 text-sm text-slate-200">
+                              {renderChangeDetails(change)}
+                          </div>
+                      </div>
+                  ))}
+              </div>
+          </div>
+      </div>
+    );
+  };
+
+
   return (
     <div className="flex flex-col h-full bg-slate-800 p-6 rounded-lg shadow-lg">
       <div className="border-b border-slate-700 flex justify-between items-center">
@@ -242,7 +360,7 @@ export const OutputDisplay: React.FC<OutputDisplayProps> = ({ output, isLoading,
           <div className="my-8 flex flex-wrap gap-4 items-center justify-center">
             <button
               onClick={onPropose}
-              disabled={isProposing || isAnalyzing || isGeneratingTests}
+              disabled={isProposing || isAnalyzing || isGeneratingTests || isReScoping}
               className="px-5 py-2.5 border border-transparent text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 disabled:bg-slate-500 disabled:cursor-not-allowed focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-slate-800 focus:ring-indigo-500 transition-all duration-200 transform hover:scale-105 inline-flex items-center justify-center shadow-lg"
             >
               {isProposing ? <LoadingSpinner /> : (
@@ -254,7 +372,7 @@ export const OutputDisplay: React.FC<OutputDisplayProps> = ({ output, isLoading,
             </button>
             <button
               onClick={onAnalyze}
-              disabled={isAnalyzing || isProposing || isGeneratingTests}
+              disabled={isAnalyzing || isProposing || isGeneratingTests || isReScoping}
               className="px-5 py-2.5 border border-slate-600 text-sm font-medium rounded-md text-slate-200 bg-slate-700 hover:bg-slate-600 disabled:bg-slate-500 disabled:cursor-not-allowed focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-slate-800 focus:ring-indigo-500 transition-all duration-200 transform hover:scale-105 inline-flex items-center justify-center shadow-lg"
             >
               {isAnalyzing ? <LoadingSpinner /> : <HealthIcon />}
@@ -262,11 +380,19 @@ export const OutputDisplay: React.FC<OutputDisplayProps> = ({ output, isLoading,
             </button>
              <button
               onClick={onGenerateTests}
-              disabled={isAnalyzing || isProposing || isGeneratingTests}
+              disabled={isAnalyzing || isProposing || isGeneratingTests || isReScoping}
               className="px-5 py-2.5 border border-slate-600 text-sm font-medium rounded-md text-slate-200 bg-slate-700 hover:bg-slate-600 disabled:bg-slate-500 disabled:cursor-not-allowed focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-slate-800 focus:ring-indigo-500 transition-all duration-200 transform hover:scale-105 inline-flex items-center justify-center shadow-lg"
             >
               {isGeneratingTests ? <LoadingSpinner /> : <BeakerIcon />}
               {isGeneratingTests ? 'Generating...' : 'Generate Test Plan'}
+            </button>
+            <button
+              onClick={onReScope}
+              disabled={isAnalyzing || isProposing || isGeneratingTests || isReScoping}
+              className="px-5 py-2.5 border border-slate-600 text-sm font-medium rounded-md text-slate-200 bg-slate-700 hover:bg-slate-600 disabled:bg-slate-500 disabled:cursor-not-allowed focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-slate-800 focus:ring-indigo-500 transition-all duration-200 transform hover:scale-105 inline-flex items-center justify-center shadow-lg"
+            >
+              {isReScoping ? <LoadingSpinner /> : <AdjustmentsIcon />}
+              {isReScoping ? 'Re-Scoping...' : 'Re-Scope for Latency'}
             </button>
           </div>
         )}
@@ -289,6 +415,13 @@ export const OutputDisplay: React.FC<OutputDisplayProps> = ({ output, isLoading,
             <div className="mt-8 pt-6 border-t border-slate-700">
                 <h3 className="text-xl font-bold mb-4 text-slate-100">API Test Plan</h3>
                 {renderTestPlan()}
+            </div>
+        )}
+
+        {(isReScoping || reScopeError || reScopeOutput) && (
+            <div className="mt-8 pt-6 border-t border-slate-700">
+                <h3 className="text-xl font-bold mb-4 text-slate-100">Re-Scope Proposal</h3>
+                {renderReScope()}
             </div>
         )}
       </div>
