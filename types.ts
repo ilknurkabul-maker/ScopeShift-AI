@@ -109,3 +109,24 @@ export interface ScopeAnalysisOutput {
     score?: number;
     notes?: string;
 }
+
+// Types for Test Plan Generation
+export interface Assertion {
+    type: string;
+    op?: string;
+    value: any;
+}
+
+export interface Test {
+    id: string;
+    tier: 'V0' | 'V1';
+    name: string;
+    endpoint: string;
+    preconditions: any[];
+    payload: Record<string, any>;
+    assertions: Assertion[];
+}
+
+export interface TestPlanOutput {
+    tests: Test[];
+}

@@ -1,10 +1,11 @@
 
 import React from 'react';
-import { ScopeShiftOutput, Tab, ProposedFeature, ScopeAnalysisOutput } from '../types';
+import { ScopeShiftOutput, Tab, ProposedFeature, ScopeAnalysisOutput, TestPlanOutput } from '../types';
 import { FeatureCard } from './FeatureCard';
 import { CodeBlock } from './CodeBlock';
 import { ProposalCard } from './ProposalCard';
 import { IssueCard } from './IssueCard';
+import { TestCard } from './TestCard';
 
 interface OutputDisplayProps {
   output: ScopeShiftOutput | null;
@@ -20,6 +21,10 @@ interface OutputDisplayProps {
   analysisOutput: ScopeAnalysisOutput | null;
   isAnalyzing: boolean;
   analysisError: string | null;
+  onGenerateTests: () => void;
+  testPlan: TestPlanOutput | null;
+  isGeneratingTests: boolean;
+  testPlanError: string | null;
 }
 
 const SkeletonLoader = () => (
@@ -66,7 +71,14 @@ const HealthIcon = () => (
     </svg>
 );
 
-export const OutputDisplay: React.FC<OutputDisplayProps> = ({ output, isLoading, error, activeTab, setActiveTab, onPropose, proposedFeatures, isProposing, proposalError, onAnalyze, analysisOutput, isAnalyzing, analysisError }) => {
+const BeakerIcon = () => (
+    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z" />
+    </svg>
+);
+
+
+export const OutputDisplay: React.FC<OutputDisplayProps> = ({ output, isLoading, error, activeTab, setActiveTab, onPropose, proposedFeatures, isProposing, proposalError, onAnalyze, analysisOutput, isAnalyzing, analysisError, onGenerateTests, testPlan, isGeneratingTests, testPlanError }) => {
   const tabs = Object.values(Tab);
 
   const renderContent = () => {
@@ -161,6 +173,20 @@ export const OutputDisplay: React.FC<OutputDisplayProps> = ({ output, isLoading,
     );
   }
 
+  const renderTestPlan = () => {
+    if (isGeneratingTests) return <ProposalSkeletonLoader />;
+    if (testPlanError) return <ErrorDisplay message={testPlanError} />;
+    if (!testPlan) return null;
+    if (testPlan.tests.length === 0) {
+        return <p className="text-slate-400 text-center py-8">No tests were generated for this scope.</p>;
+    }
+    return (
+        <div className="space-y-4">
+            {testPlan.tests.map(t => <TestCard key={t.id} test={t} />)}
+        </div>
+    );
+  }
+
   return (
     <div className="flex flex-col h-full bg-slate-800 p-6 rounded-lg shadow-lg">
       <div className="border-b border-slate-700">
@@ -187,7 +213,7 @@ export const OutputDisplay: React.FC<OutputDisplayProps> = ({ output, isLoading,
           <div className="my-8 flex flex-wrap gap-4 items-center justify-center">
             <button
               onClick={onPropose}
-              disabled={isProposing || isAnalyzing}
+              disabled={isProposing || isAnalyzing || isGeneratingTests}
               className="px-5 py-2.5 border border-transparent text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 disabled:bg-slate-500 disabled:cursor-not-allowed focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-slate-800 focus:ring-indigo-500 transition-all duration-200 transform hover:scale-105 inline-flex items-center justify-center shadow-lg"
             >
               {isProposing ? <LoadingSpinner /> : (
@@ -199,11 +225,19 @@ export const OutputDisplay: React.FC<OutputDisplayProps> = ({ output, isLoading,
             </button>
             <button
               onClick={onAnalyze}
-              disabled={isAnalyzing || isProposing}
+              disabled={isAnalyzing || isProposing || isGeneratingTests}
               className="px-5 py-2.5 border border-slate-600 text-sm font-medium rounded-md text-slate-200 bg-slate-700 hover:bg-slate-600 disabled:bg-slate-500 disabled:cursor-not-allowed focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-slate-800 focus:ring-indigo-500 transition-all duration-200 transform hover:scale-105 inline-flex items-center justify-center shadow-lg"
             >
               {isAnalyzing ? <LoadingSpinner /> : <HealthIcon />}
               {isAnalyzing ? 'Analyzing...' : 'Analyze Scope Health'}
+            </button>
+             <button
+              onClick={onGenerateTests}
+              disabled={isAnalyzing || isProposing || isGeneratingTests}
+              className="px-5 py-2.5 border border-slate-600 text-sm font-medium rounded-md text-slate-200 bg-slate-700 hover:bg-slate-600 disabled:bg-slate-500 disabled:cursor-not-allowed focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-slate-800 focus:ring-indigo-500 transition-all duration-200 transform hover:scale-105 inline-flex items-center justify-center shadow-lg"
+            >
+              {isGeneratingTests ? <LoadingSpinner /> : <BeakerIcon />}
+              {isGeneratingTests ? 'Generating...' : 'Generate Test Plan'}
             </button>
           </div>
         )}
@@ -219,6 +253,13 @@ export const OutputDisplay: React.FC<OutputDisplayProps> = ({ output, isLoading,
             <div className="mt-8 pt-6 border-t border-slate-700">
                 <h3 className="text-xl font-bold mb-4 text-slate-100">Scope Health Analysis</h3>
                 {renderAnalysis()}
+            </div>
+        )}
+
+        {(isGeneratingTests || testPlanError || testPlan) && (
+            <div className="mt-8 pt-6 border-t border-slate-700">
+                <h3 className="text-xl font-bold mb-4 text-slate-100">API Test Plan</h3>
+                {renderTestPlan()}
             </div>
         )}
       </div>

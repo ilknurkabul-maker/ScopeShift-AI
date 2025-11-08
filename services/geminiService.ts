@@ -1,6 +1,6 @@
 
 import { GoogleGenAI, Type } from "@google/genai";
-import { Feature, ScopeShiftOutput, ProposedFeaturesOutput, ScopeAnalysisInput, ScopeAnalysisOutput } from '../types';
+import { Feature, ScopeShiftOutput, ProposedFeaturesOutput, ScopeAnalysisInput, ScopeAnalysisOutput, TestPlanOutput } from '../types';
 
 const API_KEY = process.env.API_KEY;
 
@@ -275,5 +275,105 @@ RULES:
             throw new Error(`Failed to analyze scope: ${error.message}`);
         }
         throw new Error("An unknown error occurred while analyzing scope.");
+    }
+};
+
+const testPlanSchema = {
+    type: Type.OBJECT,
+    properties: {
+        tests: {
+            type: Type.ARRAY,
+            description: "An array of test cases.",
+            items: {
+                type: Type.OBJECT,
+                properties: {
+                    id: { type: Type.STRING, description: "Unique ID for the test case, e.g., 'T-1'." },
+                    tier: { type: Type.STRING, enum: ['V0', 'V1'] },
+                    name: { type: Type.STRING, description: "Test function name, pytest-style." },
+                    endpoint: { type: Type.STRING, description: "The API endpoint to test." },
+                    preconditions: {
+                        type: Type.ARRAY,
+                        items: { type: Type.STRING },
+                        description: "Conditions that must be met before the test."
+                    },
+                    payload: { type: Type.STRING, description: "JSON string for the request payload. Can be an empty object string '{}'." },
+                    assertions: {
+                        type: Type.ARRAY,
+                        items: {
+                            type: Type.OBJECT,
+                            properties: {
+                                type: { type: Type.STRING, description: "Type of assertion, e.g., 'status', 'json_has_keys'." },
+                                op: { type: Type.STRING, description: "Operator, e.g., '==', '>'. Optional." },
+                                value: { type: Type.STRING, description: "Value for assertion. Stringify complex types like numbers or arrays." }
+                            },
+                            required: ['type', 'value']
+                        }
+                    }
+                },
+                required: ['id', 'tier', 'name', 'endpoint', 'preconditions', 'payload', 'assertions']
+            }
+        }
+    },
+    required: ['tests']
+};
+
+export const generateTestPlan = async (input: ScopeAnalysisInput): Promise<TestPlanOutput> => {
+    const prompt = `TASK: Convert features + ACs into a test plan with V0/V1 markers.
+RETURN JSON ONLY using the schema provided.
+
+INPUT:
+${JSON.stringify(input, null, 2)}
+
+RULES:
+- Map each AC to one test id.
+- Mark tests as "tier": "V0" or "V1".
+- Keep V0 minimal: no network, no external API calls, in-memory store only.
+- Assume endpoints:
+  - POST /events
+  - POST /events/{id}/rsvp
+  - GET  /events/{id}/attendees.txt
+`;
+
+    try {
+        const response = await ai.models.generateContent({
+            model: "gemini-2.5-pro",
+            contents: { parts: [{ text: prompt }] },
+            systemInstruction: { parts: [{ text: "You are an AI test engineer that creates API test plans from product specifications. You must follow the user's instructions precisely and only return JSON that adheres to the provided schema." }] },
+            config: {
+                responseMimeType: "application/json",
+                responseSchema: testPlanSchema,
+                temperature: 0.1,
+            }
+        });
+
+        const jsonText = response.text.trim();
+        const parsed = JSON.parse(jsonText);
+        parsed.tests.forEach((test: any) => {
+            if (typeof test.payload === 'string') {
+                try {
+                    test.payload = JSON.parse(test.payload);
+                } catch (e) {
+                    console.warn(`Failed to parse payload string for test ${test.id}:`, test.payload);
+                    test.payload = {};
+                }
+            }
+
+            // The `value` in assertions might be a stringified number or array. Let's parse it.
+            test.assertions.forEach((assertion: any) => {
+                try {
+                    assertion.value = JSON.parse(assertion.value);
+                } catch (e) {
+                    // a normal string, do nothing
+                }
+            });
+        });
+        return parsed as TestPlanOutput;
+
+    } catch (error) {
+        console.error("Error generating test plan with Gemini API:", error);
+        if (error instanceof Error) {
+            throw new Error(`Failed to generate test plan: ${error.message}`);
+        }
+        throw new Error("An unknown error occurred while generating test plan.");
     }
 };

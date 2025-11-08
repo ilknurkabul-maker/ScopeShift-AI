@@ -2,8 +2,8 @@
 import React, { useState } from 'react';
 import { ScenarioInput } from './components/ScenarioInput';
 import { OutputDisplay } from './components/OutputDisplay';
-import { ScopeShiftOutput, Tab, ProposedFeature, ScopeAnalysisOutput } from './types';
-import { generateScope, proposeFeatures, analyzeScope } from './services/geminiService';
+import { ScopeShiftOutput, Tab, ProposedFeature, ScopeAnalysisOutput, TestPlanOutput } from './types';
+import { generateScope, proposeFeatures, analyzeScope, generateTestPlan } from './services/geminiService';
 
 function App() {
   const [scenario, setScenario] = useState('');
@@ -20,6 +20,10 @@ function App() {
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [analysisError, setAnalysisError] = useState<string | null>(null);
 
+  const [testPlan, setTestPlan] = useState<TestPlanOutput | null>(null);
+  const [isGeneratingTests, setIsGeneratingTests] = useState(false);
+  const [testPlanError, setTestPlanError] = useState<string | null>(null);
+
   const handleGenerate = async () => {
     if (!scenario.trim()) return;
     setIsLoading(true);
@@ -29,6 +33,8 @@ function App() {
     setProposalError(null);
     setAnalysisOutput(null);
     setAnalysisError(null);
+    setTestPlan(null);
+    setTestPlanError(null);
     try {
       const result = await generateScope(scenario);
       setOutput(result);
@@ -63,14 +69,9 @@ function App() {
     }
   };
 
-  const handleAnalyzeScope = async () => {
-    if (!output) return;
-
-    setIsAnalyzing(true);
-    setAnalysisError(null);
-    setAnalysisOutput(null);
-
-    const analysisInput = {
+  const createScopeInput = () => {
+    if (!output) return null;
+    return {
         features: output.features.map(f => ({ id: f.id, title: f.title, tier: f.tier })),
         acceptance: output.features.flatMap(f => 
             f.acceptanceCriteria.map(ac => ({ feature: f.id, id: ac.id, text: ac.description }))
@@ -81,6 +82,15 @@ function App() {
             p99_latency_ms: 800
         }
     };
+  }
+
+  const handleAnalyzeScope = async () => {
+    const analysisInput = createScopeInput();
+    if (!analysisInput) return;
+
+    setIsAnalyzing(true);
+    setAnalysisError(null);
+    setAnalysisOutput(null);
 
     try {
         const result = await analyzeScope(analysisInput);
@@ -94,7 +104,29 @@ function App() {
     } finally {
         setIsAnalyzing(false);
     }
-};
+  };
+
+  const handleGenerateTestPlan = async () => {
+    const testPlanInput = createScopeInput();
+    if (!testPlanInput) return;
+
+    setIsGeneratingTests(true);
+    setTestPlanError(null);
+    setTestPlan(null);
+
+    try {
+        const result = await generateTestPlan(testPlanInput);
+        setTestPlan(result);
+    } catch (err) {
+        if (err instanceof Error) {
+            setTestPlanError(err.message);
+        } else {
+            setTestPlanError('An unknown error occurred while generating the test plan.');
+        }
+    } finally {
+        setIsGeneratingTests(false);
+    }
+  };
 
 
   return (
@@ -133,6 +165,10 @@ function App() {
               analysisOutput={analysisOutput}
               isAnalyzing={isAnalyzing}
               analysisError={analysisError}
+              onGenerateTests={handleGenerateTestPlan}
+              testPlan={testPlan}
+              isGeneratingTests={isGeneratingTests}
+              testPlanError={testPlanError}
             />
           </div>
         </main>
