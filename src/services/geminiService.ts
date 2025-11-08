@@ -474,31 +474,67 @@ RULES:
 };
 
 export const finalizeScope = async (scope: ScopeShiftOutput): Promise<string> => {
-    const prompt = `You are ScopeShift Finalizer. Take this JSON EXACTLY AS-IS:
+    const prompt = `You are ScopeShift Finalizer, an expert AI that generates complete, runnable applications from a JSON product scope.
 
+Take this JSON SCOPE EXACTLY AS-IS:
 ${JSON.stringify(scope, null, 2)}
 
-Goal: Emit a runnable FastAPI app + pytest tests from it.
+Your task is to generate the code for a complete FastAPI application based on the V0 features in the scope.
 
-Rules
-- V0 only; V1 -> TODO comments.
-- No external HTTP calls in V0; stub integrations.
-- Normalize shapes:
-  features[].acceptance (array of strings)
-  tests[].filename, tests[].code
-  templates[].path, templates[].contents
+**Core Requirements:**
+- **Stack:** Python 3.10+, FastAPI, Pydantic, pytest.
+- **Data Store:** Use an in-memory store ONLY. No databases or external services for V0.
+- **V0 Features to Implement:**
+  1. \`POST /plants\`: Creates a plant. Requires \`{name: str, frequency_days: int}\`. Sets \`last_watered_date\` to the current date.
+  2. \`GET /plants\`: Lists all plants. The response for each plant must include a computed \`next_watering_date\`.
+  3. \`POST /plants/{id}/water\`: Updates a plant's \`last_watered_date\` to the current date.
+- **V1 Features:** Add any features marked as "V1" in the JSON scope as \`# TODO: V1 - ...\` comments in the relevant code sections.
 
-Output ONLY file blocks, fully formed (no prose):
-=== path: examples/plants/server.py ===
+**File Generation Rules:**
+- You MUST generate content for ALL 6 files listed below.
+- Your entire response must consist ONLY of the file blocks. Do not add any introductory text, explanations, or summaries.
+- Adhere strictly to the specified output format.
+
+**Output Format:**
+=== path: [full file path] ===
 <code>
-=== path: examples/plants/routes.py ===
-<code>
-=== path: examples/plants/store.py ===
-<code>
-=== path: tests/test_plants_v0.py ===
-<code>
-=== path: README.md ===
-<code>`;
+[file content]
+</code>
+
+**Files to Generate:**
+
+1.  **pyproject.toml**:
+    - Create a minimal \`[project]\` section.
+    - name = "plant-api"
+    - dependencies = ["fastapi", "uvicorn[standard]", "pydantic"]
+    - Create a \`[project.optional-dependencies]\` section for \`test\` containing \`["pytest"]\`.
+
+2.  **examples/plants/store.py**:
+    - Implement an in-memory dictionary for storing plant objects.
+    - Define a data structure or use a dictionary for plants: id (str, use UUID), name (str), frequency_days (int), last_watered_date (date).
+    - Create functions: \`create_plant\`, \`get_plant\`, \`list_plants\`, \`update_plant_watered_date\`.
+
+3.  **examples/plants/routes.py**:
+    - Use a FastAPI \`APIRouter\`.
+    - Implement the three V0 endpoints, calling functions from the store.
+    - Use Pydantic models for request bodies and response schemas to ensure validation and correct serialization. The GET response model should include the computed \`next_watering_date\`.
+
+4.  **examples/plants/server.py**:
+    - Instantiate the main FastAPI app.
+    - Include the router from \`routes.py\`.
+
+5.  **tests/test_plants_v0.py**:
+    - Use \`from fastapi.testclient import TestClient\`.
+    - Write tests for the success cases of all three V0 endpoints.
+
+6.  **README.md**:
+    - Include setup and run instructions:
+      - Creating a virtual environment (\`python -m venv venv\`).
+      - Activating the environment.
+      - Installing dependencies (\`pip install "fastapi[all]" pydantic pytest\`).
+      - Running tests (\`pytest\`).
+      - Running the server (\`uvicorn examples.plants.server:app --reload\`).
+`;
     try {
         const ai = getAiClient();
         const response = await ai.models.generateContent({
