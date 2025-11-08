@@ -35,3 +35,26 @@ export enum Tab {
   Tests = 'Test Specs',
   Code = 'Code Templates',
 }
+
+export interface Impacts {
+  cold_start_ms: string;
+  p99_latency_ms: string;
+  cost: 'low' | 'med' | 'high';
+}
+
+export interface ProposedFeature {
+  id: string;
+  title: string;
+  tier_suggestion: 'V0' | 'V1';
+  rationale: string;
+  impacts: Impacts;
+  risk: 'low' | 'med' | 'high';
+  acs: string[];
+  depends_on?: string[];
+  constraints_ok: boolean;
+  conflicts?: string[];
+}
+
+export interface ProposedFeaturesOutput {
+    candidates: ProposedFeature[];
+}

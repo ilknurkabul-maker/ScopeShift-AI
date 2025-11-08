@@ -2,8 +2,8 @@
 import React, { useState } from 'react';
 import { ScenarioInput } from './components/ScenarioInput';
 import { OutputDisplay } from './components/OutputDisplay';
-import { ScopeShiftOutput, Tab } from './types';
-import { generateScope } from './services/geminiService';
+import { ScopeShiftOutput, Tab, ProposedFeature } from './types';
+import { generateScope, proposeFeatures } from './services/geminiService';
 
 function App() {
   const [scenario, setScenario] = useState('');
@@ -12,11 +12,17 @@ function App() {
   const [error, setError] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<Tab>(Tab.Features);
 
+  const [proposedFeatures, setProposedFeatures] = useState<ProposedFeature[] | null>(null);
+  const [isProposing, setIsProposing] = useState(false);
+  const [proposalError, setProposalError] = useState<string | null>(null);
+
   const handleGenerate = async () => {
     if (!scenario.trim()) return;
     setIsLoading(true);
     setError(null);
     setOutput(null);
+    setProposedFeatures(null);
+    setProposalError(null);
     try {
       const result = await generateScope(scenario);
       setOutput(result);
@@ -31,6 +37,26 @@ function App() {
       setIsLoading(false);
     }
   };
+
+  const handlePropose = async () => {
+    if (!output?.features || output.features.length === 0) return;
+    setIsProposing(true);
+    setProposalError(null);
+    setProposedFeatures(null);
+    try {
+      const result = await proposeFeatures(output.features);
+      setProposedFeatures(result.candidates);
+    } catch (err) {
+      if (err instanceof Error) {
+        setProposalError(err.message);
+      } else {
+        setProposalError('An unknown error occurred while proposing features.');
+      }
+    } finally {
+      setIsProposing(false);
+    }
+  };
+
 
   return (
     <div className="min-h-screen bg-slate-900 text-white p-4 sm:p-6 lg:p-8">
@@ -60,6 +86,10 @@ function App() {
               error={error}
               activeTab={activeTab}
               setActiveTab={setActiveTab}
+              onPropose={handlePropose}
+              proposedFeatures={proposedFeatures}
+              isProposing={isProposing}
+              proposalError={proposalError}
             />
           </div>
         </main>

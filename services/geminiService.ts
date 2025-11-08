@@ -1,6 +1,6 @@
 
 import { GoogleGenAI, Type } from "@google/genai";
-import { ScopeShiftOutput } from '../types';
+import { Feature, ScopeShiftOutput, ProposedFeaturesOutput } from '../types';
 
 const API_KEY = process.env.API_KEY;
 
@@ -98,9 +98,9 @@ export const generateScope = async (scenario: string): Promise<ScopeShiftOutput>
   try {
     const response = await ai.models.generateContent({
       model: "gemini-2.5-pro",
-      contents: [{ role: 'user', parts: [{ text: scenario }] }],
+      contents: scenario,
       config: {
-        systemInstruction: { role: 'model', parts: [{ text: systemInstruction }] },
+        systemInstruction: systemInstruction,
         responseMimeType: "application/json",
         responseSchema: responseSchema,
         temperature: 0.2,
@@ -110,7 +110,6 @@ export const generateScope = async (scenario: string): Promise<ScopeShiftOutput>
     });
 
     const jsonText = response.text.trim();
-    // It's good practice to validate the parsed object, but we trust Gemini with responseSchema
     const parsedOutput = JSON.parse(jsonText) as ScopeShiftOutput;
     return parsedOutput;
 
@@ -120,5 +119,83 @@ export const generateScope = async (scenario: string): Promise<ScopeShiftOutput>
       throw new Error(`Failed to generate scope: ${error.message}`);
     }
     throw new Error("An unknown error occurred while generating scope.");
+  }
+};
+
+
+const proposalSchema = {
+    type: Type.OBJECT,
+    properties: {
+        candidates: {
+            type: Type.ARRAY,
+            description: "A list of proposed new features.",
+            items: {
+                type: Type.OBJECT,
+                properties: {
+                    id: { type: Type.STRING, description: "A unique ID for the proposal, e.g., 'PROPOSED-1'." },
+                    title: { type: Type.STRING, description: "A short name for the proposed feature." },
+                    tier_suggestion: { type: Type.STRING, description: "'V0' or 'V1'." },
+                    rationale: { type: Type.STRING, description: "1-2 lines explaining why this feature is proposed." },
+                    impacts: {
+                        type: Type.OBJECT,
+                        properties: {
+                            cold_start_ms: { type: Type.STRING, description: "Estimated change in cold start time, e.g., '+50' or '-10'." },
+                            p99_latency_ms: { type: Type.STRING, description: "Estimated change in p99 latency, e.g., '+100' or '0'." },
+                            cost: { type: Type.STRING, description: "'low', 'med', or 'high'." }
+                        },
+                        required: ["cold_start_ms", "p99_latency_ms", "cost"]
+                    },
+                    risk: { type: Type.STRING, description: "'low', 'med', or 'high'." },
+                    acs: { type: Type.ARRAY, items: { type: Type.STRING }, description: "List of acceptance criteria for the proposed feature." },
+                    depends_on: { type: Type.ARRAY, items: { type: Type.STRING }, description: "Optional list of feature IDs it depends on." },
+                    constraints_ok: { type: Type.BOOLEAN, description: "Whether the proposal meets the given constraints." },
+                    conflicts: { type: Type.ARRAY, items: { type: Type.STRING }, description: "Optional list of conflict explanations." }
+                },
+                required: ["id", "title", "tier_suggestion", "rationale", "impacts", "risk", "acs", "constraints_ok"]
+            }
+        }
+    },
+    required: ["candidates"]
+};
+
+export const proposeFeatures = async (existingFeatures: Feature[]): Promise<ProposedFeaturesOutput> => {
+  const seedScenarios = existingFeatures.map(f => `- "${f.title}"`).join('\n');
+  const prompt = `Propose additional features from seed scenarios, under current constraints.
+RETURN JSON ONLY.
+
+SEED_SCENARIOS:
+${seedScenarios}
+
+CONSTRAINTS:
+- cold_start_ms: 400
+- auth_required: false
+- p99_latency_ms: 800
+
+GUARDRAILS:
+- MVP (V0) must be schema-safe: no new required fields; no external APIs; minimal I/O.
+- External APIs, email providers, file exports → V1 only.
+- Deduplicate using title similarity; flag conflicts (e.g., public RSVP vs email required).`;
+
+  try {
+    const response = await ai.models.generateContent({
+      model: "gemini-2.5-pro",
+      contents: prompt,
+      config: {
+        systemInstruction: "You are a senior product manager AI that proposes new features based on existing ones and a set of constraints. You must follow the user's instructions precisely and only return JSON that adheres to the provided schema.",
+        responseMimeType: "application/json",
+        responseSchema: proposalSchema,
+        temperature: 0.4,
+      }
+    });
+
+    const jsonText = response.text.trim();
+    return JSON.parse(jsonText) as ProposedFeaturesOutput;
+
+  } catch (error) {
+    console.error("Error proposing features with Gemini API:", error);
+    if (error instanceof Error) {
+      throw new Error(`Failed to propose features: ${error.message}`);
+    }
+    throw new Error("An unknown error occurred while proposing features.");
   }
 };

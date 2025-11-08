@@ -1,8 +1,9 @@
 
 import React from 'react';
-import { ScopeShiftOutput, Tab, Feature, TestSpec, CodeTemplate } from '../types';
+import { ScopeShiftOutput, Tab, ProposedFeature } from '../types';
 import { FeatureCard } from './FeatureCard';
 import { CodeBlock } from './CodeBlock';
+import { ProposalCard } from './ProposalCard';
 
 interface OutputDisplayProps {
   output: ScopeShiftOutput | null;
@@ -10,6 +11,10 @@ interface OutputDisplayProps {
   error: string | null;
   activeTab: Tab;
   setActiveTab: (tab: Tab) => void;
+  onPropose: () => void;
+  proposedFeatures: ProposedFeature[] | null;
+  isProposing: boolean;
+  proposalError: string | null;
 }
 
 const SkeletonLoader = () => (
@@ -23,6 +28,14 @@ const SkeletonLoader = () => (
     </div>
 );
 
+const ProposalSkeletonLoader = () => (
+    <div className="space-y-4 animate-pulse">
+        <div className="h-40 bg-slate-700 rounded-lg"></div>
+        <div className="h-40 bg-slate-700 rounded-lg"></div>
+    </div>
+);
+
+
 const ErrorDisplay: React.FC<{ message: string }> = ({ message }) => (
     <div className="bg-red-900 border border-red-700 text-red-200 px-4 py-3 rounded-lg" role="alert">
         <strong className="font-bold">Error: </strong>
@@ -30,7 +43,15 @@ const ErrorDisplay: React.FC<{ message: string }> = ({ message }) => (
     </div>
 );
 
-export const OutputDisplay: React.FC<OutputDisplayProps> = ({ output, isLoading, error, activeTab, setActiveTab }) => {
+const LoadingSpinner = () => (
+    <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+    </svg>
+);
+
+
+export const OutputDisplay: React.FC<OutputDisplayProps> = ({ output, isLoading, error, activeTab, setActiveTab, onPropose, proposedFeatures, isProposing, proposalError }) => {
   const tabs = Object.values(Tab);
 
   const renderContent = () => {
@@ -84,6 +105,20 @@ export const OutputDisplay: React.FC<OutputDisplayProps> = ({ output, isLoading,
     }
   };
 
+  const renderProposals = () => {
+    if (isProposing) return <ProposalSkeletonLoader />;
+    if (proposalError) return <ErrorDisplay message={proposalError} />;
+    if (!proposedFeatures) return null;
+    if (proposedFeatures.length === 0) {
+        return <p className="text-slate-400 text-center py-8">No new feature suggestions at this time.</p>;
+    }
+    return (
+        <div className="space-y-4">
+            {proposedFeatures.map(p => <ProposalCard key={p.id} proposal={p} />)}
+        </div>
+    );
+  }
+
   return (
     <div className="flex flex-col h-full bg-slate-800 p-6 rounded-lg shadow-lg">
       <div className="border-b border-slate-700">
@@ -105,6 +140,31 @@ export const OutputDisplay: React.FC<OutputDisplayProps> = ({ output, isLoading,
       </div>
       <div className="mt-6 flex-grow overflow-y-auto pr-2">
         {renderContent()}
+        
+        {output && !isLoading && !error && (
+          <div className="my-8 text-center">
+            <button
+              onClick={onPropose}
+              disabled={isProposing}
+              className="px-6 py-3 border border-transparent text-base font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 disabled:bg-slate-500 disabled:cursor-not-allowed focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-slate-800 focus:ring-indigo-500 transition-all duration-200 transform hover:scale-105 inline-flex items-center justify-center shadow-lg"
+            >
+              {isProposing ? <LoadingSpinner /> : (
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2" viewBox="0 0 20 20" fill="currentColor">
+                  <path d="M10 3a1 1 0 011 1v5h5a1 1 0 110 2h-5v5a1 1 0 11-2 0v-5H4a1 1 0 110-2h5V4a1 1 0 011-1z" />
+                  <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-13a1 1 0 10-2 0v4H5a1 1 0 100 2h4v4a1 1 0 102 0v-4h4a1 1 0 100-2h-4V5z" clipRule="evenodd" />
+                </svg>
+              )}
+              {isProposing ? 'Thinking...' : 'Suggest Next Features'}
+            </button>
+          </div>
+        )}
+
+        {(isProposing || proposalError || proposedFeatures) && (
+            <div className="mt-6 pt-6 border-t border-slate-700">
+                <h3 className="text-xl font-bold mb-4 text-slate-100">Next Feature Proposals</h3>
+                {renderProposals()}
+            </div>
+        )}
       </div>
     </div>
   );
