@@ -2,8 +2,8 @@
 import React, { useState } from 'react';
 import { ScenarioInput } from './components/ScenarioInput';
 import { OutputDisplay } from './components/OutputDisplay';
-import { ScopeShiftOutput, Tab, ProposedFeature } from './types';
-import { generateScope, proposeFeatures } from './services/geminiService';
+import { ScopeShiftOutput, Tab, ProposedFeature, ScopeAnalysisOutput } from './types';
+import { generateScope, proposeFeatures, analyzeScope } from './services/geminiService';
 
 function App() {
   const [scenario, setScenario] = useState('');
@@ -16,6 +16,10 @@ function App() {
   const [isProposing, setIsProposing] = useState(false);
   const [proposalError, setProposalError] = useState<string | null>(null);
 
+  const [analysisOutput, setAnalysisOutput] = useState<ScopeAnalysisOutput | null>(null);
+  const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [analysisError, setAnalysisError] = useState<string | null>(null);
+
   const handleGenerate = async () => {
     if (!scenario.trim()) return;
     setIsLoading(true);
@@ -23,6 +27,8 @@ function App() {
     setOutput(null);
     setProposedFeatures(null);
     setProposalError(null);
+    setAnalysisOutput(null);
+    setAnalysisError(null);
     try {
       const result = await generateScope(scenario);
       setOutput(result);
@@ -57,6 +63,39 @@ function App() {
     }
   };
 
+  const handleAnalyzeScope = async () => {
+    if (!output) return;
+
+    setIsAnalyzing(true);
+    setAnalysisError(null);
+    setAnalysisOutput(null);
+
+    const analysisInput = {
+        features: output.features.map(f => ({ id: f.id, title: f.title, tier: f.tier })),
+        acceptance: output.features.flatMap(f => 
+            f.acceptanceCriteria.map(ac => ({ feature: f.id, id: ac.id, text: ac.description }))
+        ),
+        constraints: {
+            cold_start_ms: 400,
+            auth_required: false,
+            p99_latency_ms: 800
+        }
+    };
+
+    try {
+        const result = await analyzeScope(analysisInput);
+        setAnalysisOutput(result);
+    } catch (err) {
+        if (err instanceof Error) {
+            setAnalysisError(err.message);
+        } else {
+            setAnalysisError('An unknown error occurred during scope analysis.');
+        }
+    } finally {
+        setIsAnalyzing(false);
+    }
+};
+
 
   return (
     <div className="min-h-screen bg-slate-900 text-white p-4 sm:p-6 lg:p-8">
@@ -90,6 +129,10 @@ function App() {
               proposedFeatures={proposedFeatures}
               isProposing={isProposing}
               proposalError={proposalError}
+              onAnalyze={handleAnalyzeScope}
+              analysisOutput={analysisOutput}
+              isAnalyzing={isAnalyzing}
+              analysisError={analysisError}
             />
           </div>
         </main>

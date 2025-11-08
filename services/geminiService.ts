@@ -1,6 +1,6 @@
 
 import { GoogleGenAI, Type } from "@google/genai";
-import { Feature, ScopeShiftOutput, ProposedFeaturesOutput } from '../types';
+import { Feature, ScopeShiftOutput, ProposedFeaturesOutput, ScopeAnalysisInput, ScopeAnalysisOutput } from '../types';
 
 const API_KEY = process.env.API_KEY;
 
@@ -98,9 +98,9 @@ export const generateScope = async (scenario: string): Promise<ScopeShiftOutput>
   try {
     const response = await ai.models.generateContent({
       model: "gemini-2.5-pro",
-      contents: scenario,
+      contents: { parts: [{ text: scenario }] },
+      systemInstruction: { parts: [{ text: systemInstruction }] },
       config: {
-        systemInstruction: systemInstruction,
         responseMimeType: "application/json",
         responseSchema: responseSchema,
         temperature: 0.2,
@@ -179,9 +179,9 @@ GUARDRAILS:
   try {
     const response = await ai.models.generateContent({
       model: "gemini-2.5-pro",
-      contents: prompt,
+      contents: { parts: [{ text: prompt }] },
+      systemInstruction: { parts: [{ text: "You are a senior product manager AI that proposes new features based on existing ones and a set of constraints. You must follow the user's instructions precisely and only return JSON that adheres to the provided schema." }] },
       config: {
-        systemInstruction: "You are a senior product manager AI that proposes new features based on existing ones and a set of constraints. You must follow the user's instructions precisely and only return JSON that adheres to the provided schema.",
         responseMimeType: "application/json",
         responseSchema: proposalSchema,
         temperature: 0.4,
@@ -198,4 +198,82 @@ GUARDRAILS:
     }
     throw new Error("An unknown error occurred while proposing features.");
   }
+};
+
+const analysisSchema = {
+    type: Type.OBJECT,
+    properties: {
+        issues: {
+            type: Type.ARRAY,
+            items: {
+                type: Type.OBJECT,
+                properties: {
+                    id: { type: Type.STRING, description: "Unique identifier for the issue." },
+                    severity: { type: Type.STRING, description: "Severity of the issue.", enum: ['critical', 'warning', 'info'] },
+                    message: { type: Type.STRING, description: "A clear description of the issue found." },
+                    location: {
+                        type: Type.OBJECT,
+                        properties: {
+                            type: { type: Type.STRING, description: "The type of rule or check that triggered the issue." },
+                            feature_id: { type: Type.STRING, description: "The ID of the feature where the issue was found." },
+                            ac_index: { type: Type.INTEGER, description: "The index of the acceptance criterion related to the issue, if applicable." }
+                        },
+                        required: ['type']
+                    },
+                    proposed_fix: {
+                        type: Type.OBJECT,
+                        properties: {
+                            summary: { type: Type.STRING, description: "A summary of the proposed fix." },
+                            action: { type: Type.STRING, description: "The suggested action to take (e.g., 'modify', 'add_ac')." },
+                            updated_text: { type: Type.STRING, description: "The new or updated text for a feature or AC, if applicable." }
+                        },
+                        required: ['summary']
+                    }
+                },
+                required: ['id', 'severity', 'message', 'location', 'proposed_fix']
+            }
+        },
+        score: { type: Type.NUMBER, description: "An overall health score for the scope, out of 100." },
+        notes: { type: Type.STRING, description: "General notes or summary of the analysis." }
+    },
+    required: ["issues"]
+};
+
+
+export const analyzeScope = async (input: ScopeAnalysisInput): Promise<ScopeAnalysisOutput> => {
+    const prompt = `Analyze features + ACs for duplicates, conflicts, and gaps. Suggest safe fixes.
+RETURN JSON ONLY using the schema provided in the tool config.
+
+INPUT:
+${JSON.stringify(input, null, 2)}
+
+RULES:
+- DUPLICATE: Title similarity ≥0.8.
+- CONFLICT_AUTH: auth_required=false vs any AC requiring login.
+- CONFLICT_EMAIL: public link vs “email required”.
+- MISSING_AC: any feature without AC.
+- DEPENDENCY: feature mentions a dependency not present.`;
+
+    try {
+        const response = await ai.models.generateContent({
+            model: "gemini-2.5-pro",
+            contents: { parts: [{ text: prompt }] },
+            systemInstruction: { parts: [{ text: "You are a senior product manager AI that analyzes product scopes for issues based on a set of rules. You must follow the user's instructions precisely and only return JSON that adheres to the provided schema." }] },
+            config: {
+                responseMimeType: "application/json",
+                responseSchema: analysisSchema,
+                temperature: 0.1,
+            }
+        });
+
+        const jsonText = response.text.trim();
+        return JSON.parse(jsonText) as ScopeAnalysisOutput;
+
+    } catch (error) {
+        console.error("Error analyzing scope with Gemini API:", error);
+        if (error instanceof Error) {
+            throw new Error(`Failed to analyze scope: ${error.message}`);
+        }
+        throw new Error("An unknown error occurred while analyzing scope.");
+    }
 };

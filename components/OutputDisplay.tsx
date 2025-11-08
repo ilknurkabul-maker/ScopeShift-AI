@@ -1,9 +1,10 @@
 
 import React from 'react';
-import { ScopeShiftOutput, Tab, ProposedFeature } from '../types';
+import { ScopeShiftOutput, Tab, ProposedFeature, ScopeAnalysisOutput } from '../types';
 import { FeatureCard } from './FeatureCard';
 import { CodeBlock } from './CodeBlock';
 import { ProposalCard } from './ProposalCard';
+import { IssueCard } from './IssueCard';
 
 interface OutputDisplayProps {
   output: ScopeShiftOutput | null;
@@ -15,6 +16,10 @@ interface OutputDisplayProps {
   proposedFeatures: ProposedFeature[] | null;
   isProposing: boolean;
   proposalError: string | null;
+  onAnalyze: () => void;
+  analysisOutput: ScopeAnalysisOutput | null;
+  isAnalyzing: boolean;
+  analysisError: string | null;
 }
 
 const SkeletonLoader = () => (
@@ -35,7 +40,6 @@ const ProposalSkeletonLoader = () => (
     </div>
 );
 
-
 const ErrorDisplay: React.FC<{ message: string }> = ({ message }) => (
     <div className="bg-red-900 border border-red-700 text-red-200 px-4 py-3 rounded-lg" role="alert">
         <strong className="font-bold">Error: </strong>
@@ -50,8 +54,19 @@ const LoadingSpinner = () => (
     </svg>
 );
 
+const CheckCircleIcon = () => (
+    <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8 mx-auto" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+    </svg>
+);
 
-export const OutputDisplay: React.FC<OutputDisplayProps> = ({ output, isLoading, error, activeTab, setActiveTab, onPropose, proposedFeatures, isProposing, proposalError }) => {
+const HealthIcon = () => (
+    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
+    </svg>
+);
+
+export const OutputDisplay: React.FC<OutputDisplayProps> = ({ output, isLoading, error, activeTab, setActiveTab, onPropose, proposedFeatures, isProposing, proposalError, onAnalyze, analysisOutput, isAnalyzing, analysisError }) => {
   const tabs = Object.values(Tab);
 
   const renderContent = () => {
@@ -119,6 +134,33 @@ export const OutputDisplay: React.FC<OutputDisplayProps> = ({ output, isLoading,
     );
   }
 
+  const renderAnalysis = () => {
+    if (isAnalyzing) return <ProposalSkeletonLoader />;
+    if (analysisError) return <ErrorDisplay message={analysisError} />;
+    if (!analysisOutput) return null;
+    if (analysisOutput.issues.length === 0) {
+        return (
+            <div className="text-center py-6 text-green-300 bg-green-900/40 rounded-lg border border-green-700/50">
+                <CheckCircleIcon />
+                <p className="mt-2 font-semibold">No issues found. Your scope looks healthy!</p>
+            </div>
+        );
+    }
+    return (
+      <>
+        {(typeof analysisOutput.score === 'number' || analysisOutput.notes) && (
+          <div className="mb-4 p-3 bg-slate-700/50 rounded-lg border border-slate-600 text-slate-300">
+            {typeof analysisOutput.score === 'number' && <p className="font-semibold"><strong>Overall Score:</strong> {analysisOutput.score}/100</p>}
+            {analysisOutput.notes && <p className="text-sm text-slate-400 mt-1"><strong>Notes:</strong> {analysisOutput.notes}</p>}
+          </div>
+        )}
+        <div className="space-y-4">
+            {analysisOutput.issues.map(issue => <IssueCard key={issue.id} issue={issue} />)}
+        </div>
+      </>
+    );
+  }
+
   return (
     <div className="flex flex-col h-full bg-slate-800 p-6 rounded-lg shadow-lg">
       <div className="border-b border-slate-700">
@@ -142,19 +184,26 @@ export const OutputDisplay: React.FC<OutputDisplayProps> = ({ output, isLoading,
         {renderContent()}
         
         {output && !isLoading && !error && (
-          <div className="my-8 text-center">
+          <div className="my-8 flex flex-wrap gap-4 items-center justify-center">
             <button
               onClick={onPropose}
-              disabled={isProposing}
-              className="px-6 py-3 border border-transparent text-base font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 disabled:bg-slate-500 disabled:cursor-not-allowed focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-slate-800 focus:ring-indigo-500 transition-all duration-200 transform hover:scale-105 inline-flex items-center justify-center shadow-lg"
+              disabled={isProposing || isAnalyzing}
+              className="px-5 py-2.5 border border-transparent text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 disabled:bg-slate-500 disabled:cursor-not-allowed focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-slate-800 focus:ring-indigo-500 transition-all duration-200 transform hover:scale-105 inline-flex items-center justify-center shadow-lg"
             >
               {isProposing ? <LoadingSpinner /> : (
                 <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2" viewBox="0 0 20 20" fill="currentColor">
                   <path d="M10 3a1 1 0 011 1v5h5a1 1 0 110 2h-5v5a1 1 0 11-2 0v-5H4a1 1 0 110-2h5V4a1 1 0 011-1z" />
-                  <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-13a1 1 0 10-2 0v4H5a1 1 0 100 2h4v4a1 1 0 102 0v-4h4a1 1 0 100-2h-4V5z" clipRule="evenodd" />
                 </svg>
               )}
-              {isProposing ? 'Thinking...' : 'Suggest Next Features'}
+              {isProposing ? 'Thinking...' : 'Suggest Features'}
+            </button>
+            <button
+              onClick={onAnalyze}
+              disabled={isAnalyzing || isProposing}
+              className="px-5 py-2.5 border border-slate-600 text-sm font-medium rounded-md text-slate-200 bg-slate-700 hover:bg-slate-600 disabled:bg-slate-500 disabled:cursor-not-allowed focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-slate-800 focus:ring-indigo-500 transition-all duration-200 transform hover:scale-105 inline-flex items-center justify-center shadow-lg"
+            >
+              {isAnalyzing ? <LoadingSpinner /> : <HealthIcon />}
+              {isAnalyzing ? 'Analyzing...' : 'Analyze Scope Health'}
             </button>
           </div>
         )}
@@ -163,6 +212,13 @@ export const OutputDisplay: React.FC<OutputDisplayProps> = ({ output, isLoading,
             <div className="mt-6 pt-6 border-t border-slate-700">
                 <h3 className="text-xl font-bold mb-4 text-slate-100">Next Feature Proposals</h3>
                 {renderProposals()}
+            </div>
+        )}
+
+        {(isAnalyzing || analysisError || analysisOutput) && (
+            <div className="mt-8 pt-6 border-t border-slate-700">
+                <h3 className="text-xl font-bold mb-4 text-slate-100">Scope Health Analysis</h3>
+                {renderAnalysis()}
             </div>
         )}
       </div>

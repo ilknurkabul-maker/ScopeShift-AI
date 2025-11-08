@@ -58,3 +58,54 @@ export interface ProposedFeature {
 export interface ProposedFeaturesOutput {
     candidates: ProposedFeature[];
 }
+
+// Types for Scope Health Analysis
+export interface FeatureInput {
+    id: string;
+    title: string;
+    tier: 'V0' | 'V1';
+}
+
+export interface AcceptanceCriterionInput {
+    feature: string; // feature ID
+    id: string;
+    text: string;
+}
+
+export interface Constraints {
+    cold_start_ms: number;
+    auth_required: boolean;
+    p99_latency_ms: number;
+}
+
+export interface ScopeAnalysisInput {
+    features: FeatureInput[];
+    acceptance: AcceptanceCriterionInput[];
+    constraints: Constraints;
+}
+
+export interface Location {
+    type: string;
+    feature_id?: string;
+    ac_index?: number;
+}
+
+export interface ProposedFix {
+    summary: string;
+    action?: string;
+    updated_text?: string;
+}
+
+export interface Issue {
+    id: string;
+    severity: 'critical' | 'warning' | 'info';
+    message: string;
+    location: Location;
+    proposed_fix: ProposedFix;
+}
+
+export interface ScopeAnalysisOutput {
+    issues: Issue[];
+    score?: number;
+    notes?: string;
+}
