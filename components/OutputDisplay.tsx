@@ -77,9 +77,30 @@ const BeakerIcon = () => (
     </svg>
 );
 
+const DownloadIcon = () => (
+    <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+    </svg>
+);
+
 
 export const OutputDisplay: React.FC<OutputDisplayProps> = ({ output, isLoading, error, activeTab, setActiveTab, onPropose, proposedFeatures, isProposing, proposalError, onAnalyze, analysisOutput, isAnalyzing, analysisError, onGenerateTests, testPlan, isGeneratingTests, testPlanError }) => {
   const tabs = Object.values(Tab);
+
+  const handleExportJson = () => {
+    if (!output) return;
+
+    const jsonString = JSON.stringify(output, null, 2);
+    const blob = new Blob([jsonString], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = 'scopeshift_output.json';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  };
 
   const renderContent = () => {
     if (isLoading) return <SkeletonLoader />;
@@ -189,7 +210,7 @@ export const OutputDisplay: React.FC<OutputDisplayProps> = ({ output, isLoading,
 
   return (
     <div className="flex flex-col h-full bg-slate-800 p-6 rounded-lg shadow-lg">
-      <div className="border-b border-slate-700">
+      <div className="border-b border-slate-700 flex justify-between items-center">
         <nav className="-mb-px flex space-x-6" aria-label="Tabs">
           {tabs.map(tab => (
             <button
@@ -205,6 +226,14 @@ export const OutputDisplay: React.FC<OutputDisplayProps> = ({ output, isLoading,
             </button>
           ))}
         </nav>
+        <button
+          onClick={handleExportJson}
+          disabled={!output || isLoading}
+          className="flex items-center px-3 py-1.5 border border-slate-600 text-xs font-medium rounded-md text-slate-300 hover:bg-slate-700 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-transparent transition-colors"
+        >
+          <DownloadIcon />
+          Export JSON
+        </button>
       </div>
       <div className="mt-6 flex-grow overflow-y-auto pr-2">
         {renderContent()}

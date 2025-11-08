@@ -1,6 +1,6 @@
 
 import { GoogleGenAI, Type } from "@google/genai";
-import { Feature, ScopeShiftOutput, ProposedFeaturesOutput, ScopeAnalysisInput, ScopeAnalysisOutput, TestPlanOutput } from '../types';
+import { Feature, ScopeShiftOutput, ProposedFeaturesOutput, ScopeAnalysisInput, ScopeAnalysisOutput, TestPlanOutput, Test } from '../types';
 
 const API_KEY = process.env.API_KEY;
 
@@ -296,7 +296,7 @@ const testPlanSchema = {
                         items: { type: Type.STRING },
                         description: "Conditions that must be met before the test."
                     },
-                    payload: { type: Type.STRING, description: "JSON string for the request payload. Can be an empty object string '{}'." },
+                    payload: { type: Type.STRING, description: "A JSON string representing the request payload. Should be '{}' for an empty payload." },
                     assertions: {
                         type: Type.ARRAY,
                         items: {
@@ -347,13 +347,16 @@ RULES:
         });
 
         const jsonText = response.text.trim();
-        const parsed = JSON.parse(jsonText);
-        parsed.tests.forEach((test: any) => {
-            if (typeof test.payload === 'string') {
+        const parsed: TestPlanOutput = JSON.parse(jsonText);
+        
+        // The API returns payload as a string, parse it into an object.
+        parsed.tests.forEach((test: Test) => {
+            const testWithAnyPayload = test as any;
+            if (typeof testWithAnyPayload.payload === 'string') {
                 try {
-                    test.payload = JSON.parse(test.payload);
+                    test.payload = JSON.parse(testWithAnyPayload.payload);
                 } catch (e) {
-                    console.warn(`Failed to parse payload string for test ${test.id}:`, test.payload);
+                    console.warn(`Failed to parse payload string for test ${test.id}:`, testWithAnyPayload.payload);
                     test.payload = {};
                 }
             }
@@ -363,11 +366,11 @@ RULES:
                 try {
                     assertion.value = JSON.parse(assertion.value);
                 } catch (e) {
-                    // a normal string, do nothing
+                    // It's a normal string, do nothing.
                 }
             });
         });
-        return parsed as TestPlanOutput;
+        return parsed;
 
     } catch (error) {
         console.error("Error generating test plan with Gemini API:", error);
