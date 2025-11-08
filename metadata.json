@@ -1,0 +1,5 @@
+{
+  "name": "ScopeShift AI PM Copilot",
+  "description": "An AI PM copilot that takes product scenarios and generates a curated feature set, acceptance criteria, test specs, and minimal code templates to accelerate rapid prototyping.",
+  "requestFramePermissions": []
+}
